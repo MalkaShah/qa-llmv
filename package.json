@@ -1,0 +1,32 @@
+{
+  "name": "malkaqa-llmv",
+  "version": "1.0.0",
+  "description": "MalkaQA — LLMV E2E test runner.",
+  "scripts": {
+    "test:api": "npx playwright test tests/api --project=api --reporter=line",
+    "test:ui": "npx playwright test tests/ui --project=ui --reporter=line",
+    "test:db": "npx ts-node tests/db/runner.ts",
+    "test:e2e": "npx playwright test tests/e2e --project=e2e --reporter=line",
+    "test:all": "npm run test:api && npm run test:ui && npm run test:db && npm run test:e2e",
+    "auth:save": "npx ts-node helpers/save-auth.ts",
+    "db:discover": "npx ts-node tests/db/phase0-discovery.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "dotenv": "^16.0.0",
+    "pg": "^8.11.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "commonjs"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.2"
+  }
+}

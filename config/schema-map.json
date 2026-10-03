@@ -1,0 +1,13 @@
+{
+  "PROJECTS":   "llmv_project",
+  "QUERIES":    "llmv_query",
+  "TOPICS":     "llmv_topic",
+  "VIS_TREND":  "llmv_analysissnapshot",
+  "CREDITS":    "llmv_creditusagelog",
+  "QUOTA":      "llmv_project",
+  "SENTIMENT":  "llmv_responsesentimentanalysis",
+  "CITATIONS":  "llmv_responsecitationanalysis",
+  "BRAND":      "llmv_brand",
+  "SNAPSHOTS":  "llmv_analysissnapshot",
+  "SNAPSHOT_PLATFORMS": "llmv_snapshot_platform_metrics"
+}

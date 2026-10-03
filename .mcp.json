@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@playwright/mcp@latest"]
+    },
+    "linear": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "linear-mcp-server"],
+      "env": {
+        "LINEAR_API_KEY": ""
+      }
+    },
+    "clickup": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "clickup-mcp-server"],
+      "env": {
+        "CLICKUP_API_TOKEN": ""
+      }
+    }
+  }
+}

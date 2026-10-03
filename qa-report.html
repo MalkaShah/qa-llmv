@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Visibility — QA Bug Report</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#161a21; --panel-2:#1c212a; --line:#262c37;
+    --ink:#e6e9ef; --muted:#98a1b3; --accent:#7c8cff;
+    --p0:#ff5c5c; --p1:#ffa43a; --p2:#5ec8ff; --ok:#4ade80;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  .wrap { max-width:1100px; margin:0 auto; padding:32px 20px 80px; }
+  header h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.2px; }
+  header .sub { color:var(--muted); font-size:14px; }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:28px 0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .card .n { font-size:28px; font-weight:600; line-height:1.1; }
+  .card .l { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; margin-top:4px; }
+  .card.p0 .n { color:var(--p0); } .card.p1 .n { color:var(--p1); }
+  .card.p2 .n { color:var(--p2); } .card.ok .n { color:var(--ok); }
+
+  h2 { font-size:18px; margin:36px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th,td { padding:10px 14px; text-align:left; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.5px; }
+  tr:last-child td { border-bottom:none; }
+
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 14px; }
+  .filters button {
+    background:var(--panel); color:var(--muted); border:1px solid var(--line);
+    padding:6px 14px; border-radius:20px; font-size:13px; cursor:pointer; font-family:inherit;
+  }
+  .filters button:hover { color:var(--ink); border-color:var(--accent); }
+  .filters button.on { background:var(--accent); border-color:var(--accent); color:#0f1115; font-weight:500; }
+
+  .bug { background:var(--panel); border:1px solid var(--line); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+  .bug-head {
+    width:100%; display:flex; align-items:center; gap:12px; padding:14px 16px;
+    background:none; border:none; color:var(--ink); font:inherit; text-align:left; cursor:pointer;
+  }
+  .bug-head:hover { background:var(--panel-2); }
+  .chev { color:var(--muted); font-size:12px; transition:transform .15s; flex:none; }
+  .bug-head[aria-expanded="true"] .chev { transform:rotate(90deg); }
+  .sev { font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px; flex:none; }
+  .sev-P0 { background:rgba(255,92,92,.15); color:var(--p0); }
+  .sev-P1 { background:rgba(255,164,58,.15); color:var(--p1); }
+  .sev-P2 { background:rgba(94,200,255,.15); color:var(--p2); }
+  .bug-id { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; color:var(--accent); flex:none; }
+  .bug-title { flex:1; font-size:14px; }
+  .suite-tag { font-size:11px; color:var(--muted); border:1px solid var(--line); padding:2px 8px; border-radius:4px; flex:none; }
+
+  .bug-body { padding:4px 18px 20px 46px; border-top:1px solid var(--line); }
+  .bug-body h4 { font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:20px 0 6px; }
+  .bug-body p { margin:6px 0; }
+  .bug-body ul,.bug-body ol { margin:6px 0; padding-left:22px; }
+  .bug-body li { margin:3px 0; }
+  .meta { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin:14px 0 4px; }
+  .meta b { color:var(--ink); font-weight:500; margin-right:5px; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media (max-width:700px){ .two-col { grid-template-columns:1fr; } }
+
+  code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:var(--panel-2); padding:1px 5px; border-radius:3px; }
+  pre.code { background:#0b0d11; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; margin:8px 0; }
+  pre.code code { background:none; padding:0; font-size:12.5px; line-height:1.55; color:#c8d3e6; }
+  .muted { color:var(--muted); }
+  footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>LLM Visibility — QA Bug Report</h1>
+  <div class="sub">
+    Production · <code>dashboard.searchatlas.com</code> ·
+    4 suites ·
+    generated 2026-08-10 11:40
+  </div>
+</header>
+
+<div class="cards">
+  <div class="card ok"><div class="n">145</div><div class="l">Passed</div></div>
+  <div class="card p0"><div class="n">0</div><div class="l">P0 — Critical</div></div>
+  <div class="card p1"><div class="n">22</div><div class="l">P1 — High</div></div>
+  <div class="card p2"><div class="n">3</div><div class="l">P2 — Medium</div></div>
+  <div class="card"><div class="n">4</div><div class="l">Logged defects</div></div>
+  <div class="card"><div class="n">282</div><div class="l">Total cases</div></div>
+</div>
+
+<h2>Suite Results</h2>
+<table>
+  <thead><tr>
+    <th>Suite</th><th>Scope</th><th>Passed</th><th>Bugs</th>
+    <th>Test bugs</th><th>Skipped</th><th>Total</th><th>Duration</th>
+  </tr></thead>
+  <tbody>
+  <tr>
+    <td><strong>API</strong></td>
+    <td class="muted">Endpoint contracts, auth, credits, quota</td>
+    <td>88</td>
+    <td>0</td>
+    <td>0</td>
+    <td>6</td>
+    <td>94</td>
+    <td class="muted">2.8 min</td>
+  </tr><tr>
+    <td><strong>UI</strong></td>
+    <td class="muted">Tabs, filters, tables, rendering</td>
+    <td>4</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>110</td>
+    <td class="muted">0.9 min</td>
+  </tr><tr>
+    <td><strong>Database</strong></td>
+    <td class="muted">Integrity, billing, tenant isolation</td>
+    <td>52</td>
+    <td>22</td>
+    <td>3</td>
+    <td>0</td>
+    <td>77</td>
+    <td class="muted">12.6 min</td>
+  </tr><tr>
+    <td><strong>E2E</strong></td>
+    <td class="muted">Cross-layer consistency and workflows</td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+    <td class="muted">0.1 min</td>
+  </tr>
+  </tbody>
+</table>
+
+<h2>Bugs — click any row to expand</h2>
+
+<div class="filters" id="filters">
+  <button class="on" data-f="all">All (25)</button>
+  <button data-f="P0">P0 (0)</button>
+  <button data-f="P1">P1 (22)</button>
+  <button data-f="P2">P2 (3)</button>
+  <button data-f="suite:api">API (0)</button><button data-f="suite:ui">UI (0)</button><button data-f="suite:db">Database (25)</button><button data-f="suite:e2e">E2E (0)</button>
+</div>
+
+<div id="buglist">
+  
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-030</span>
+    <span class="bug-title">No duplicate active projects for the same brand and country</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>02-data-integrity.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 10 offending row(s). 10 brand+country combos have duplicate active projects</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>02-data-integrity.spec.ts</code> for case DB-030</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 10 brand+country combos have duplicate active projects
+Expected: 0
+Received: 10
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-030</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-030"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-031</span>
+    <span class="bug-title">No duplicate query titles within the same topic</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>02-data-integrity.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 10 offending row(s). 10 topics contain duplicate query titles</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>02-data-integrity.spec.ts</code> for case DB-031</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 10 topics contain duplicate query titles
+Expected: 0
+Received: 10
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-031</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-031"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-032</span>
+    <span class="bug-title">No duplicate topic titles within the same brand</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>02-data-integrity.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 10 offending row(s). 10 brands contain duplicate topic titles</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>02-data-integrity.spec.ts</code> for case DB-032</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 10 brands contain duplicate topic titles
+Expected: 0
+Received: 10
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-032</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-032"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-050</span>
+    <span class="bug-title">No duplicate credit charges for the same snapshot</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 20 offending row(s). 20 snapshots were charged more than once — DOUBLE BILLING</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-050</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 20 snapshots were charged more than once — DOUBLE BILLING
+Expected: 0
+Received: 20
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-050</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-050"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-051</span>
+    <span class="bug-title">No duplicate credit charges for the same reservation</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 1 offending row(s). 1 reservations produced more than one charge — DOUBLE BILLING</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-051</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 1 reservations produced more than one charge — DOUBLE BILLING
+Expected: 0
+Received: 1
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-051</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-051"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-053</span>
+    <span class="bug-title">No charge recorded against a failed snapshot</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100 charges were made for snapshots that failed — customers billed for nothing</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-053</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100 charges were made for snapshots that failed — customers billed for nothing
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-053</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-053"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-054</span>
+    <span class="bug-title">Snapshot credits_consumed matches the credit log</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 20 offending row(s). 20 snapshots disagree with the credit log on amount charged</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-054</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 20 snapshots disagree with the credit log on amount charged
+Expected: 0
+Received: 20
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-054</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-054"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-055</span>
+    <span class="bug-title">Balance decreases monotonically within a customer ledger</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 20 offending row(s). 20 ledger entries show the balance increasing on a charge</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-055</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 20 ledger entries show the balance increasing on a charge
+Expected: 0
+Received: 20
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-055</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-055"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-060</span>
+    <span class="bug-title">Projects flagged insufficient actually have a cost set</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 1063 offending row(s). 1063 projects are flagged insufficient but have no per-run cost</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-060</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 1063 projects are flagged insufficient but have no per-run cost
+Expected: 0
+Received: 1063
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-060</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-060"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-063</span>
+    <span class="bug-title">Deleted projects are not still marked active</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 690 offending row(s). 690 projects are soft-deleted but still active — they may still consume credits</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-063</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 690 projects are soft-deleted but still active — they may still consume credits
+Expected: 0
+Received: 690
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-063</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-063"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-064</span>
+    <span class="bug-title">Every project belongs to a customer</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 4507 offending row(s). 4507 projects have no customer_id — billing cannot be attributed</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-064</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 4507 projects have no customer_id — billing cannot be attributed
+Expected: 0
+Received: 4507
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-064</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-064"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-070</span>
+    <span class="bug-title">No project ran more often than its configured frequency</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 20 offending row(s). 20 projects ran significantly more often than configured — over-billing risk</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-070</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 20 projects ran significantly more often than configured — over-billing risk
+Expected: 0
+Received: 20
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-070</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-070"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-071</span>
+    <span class="bug-title">No snapshot stuck in a running state for over 24 hours</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100 snapshots have been running for over 24 hours — likely stuck jobs holding credits</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-071</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100 snapshots have been running for over 24 hours — likely stuck jobs holding credits
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Compute and credits are consumed without producing value for the customer.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-071</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-071"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-072</span>
+    <span class="bug-title">No completed snapshot has zero successful responses</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>03-credits-business-logic.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100 snapshots are marked complete but returned no successful responses</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>03-credits-business-logic.spec.ts</code> for case DB-072</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100 snapshots are marked complete but returned no successful responses
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-072</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-072"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-090</span>
+    <span class="bug-title">Every topic belongs to a brand owned by exactly one customer</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 20 offending row(s). 20 brands are shared across multiple customers — CROSS-TENANT LEAK</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-090</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 20 brands are shared across multiple customers — CROSS-TENANT LEAK
+Expected: 0
+Received: 20
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>One customer can reach another customer's data. This is a security and compliance exposure.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-090</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-090"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-092</span>
+    <span class="bug-title">Credit log entries match the project customer</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 11 offending row(s). 11 credit charges are attributed to the wrong customer — BILLING LEAK</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-092</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 11 credit charges are attributed to the wrong customer — BILLING LEAK
+Expected: 0
+Received: 11
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-092</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-092"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-100</span>
+    <span class="bug-title">Soft-deleted topics have no active queries</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100 active queries belong to a deleted topic — they will still be analysed and billed</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-100</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100 active queries belong to a deleted topic — they will still be analysed and billed
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-100</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-100"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-102</span>
+    <span class="bug-title">Soft-deleted projects have no snapshots created after deletion</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 1 offending row(s). 1 snapshots were created after their project was deleted — zombie runs</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-102</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 1 snapshots were created after their project was deleted — zombie runs
+Expected: 0
+Received: 1
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-102</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-102"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-111</span>
+    <span class="bug-title">No topic has an empty title</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 1 offending row(s). 1 active topics have an empty title</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-111</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 1 active topics have an empty title
+Expected: 0
+Received: 1
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Customers may see incorrect or missing information in the product.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-111</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-111"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-120</span>
+    <span class="bug-title">No inactive project has recent snapshots</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100 snapshots ran in the last 30 days for projects that are inactive — COST LEAK</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-120</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100 snapshots ran in the last 30 days for projects that are inactive — COST LEAK
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Compute and credits are consumed without producing value for the customer.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-120</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-120"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-121</span>
+    <span class="bug-title">No orphaned LLM responses without an analysis row</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 50 offending row(s). 50 successful LLM responses have no sentiment or citation analysis — paid for, never used</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-121</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 50 successful LLM responses have no sentiment or citation analysis — paid for, never used
+Expected: 0
+Received: 50
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Compute and credits are consumed without producing value for the customer.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-121</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-121"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P1" data-suite="db" data-bucket="app">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P1">P1</span>
+    <span class="bug-id">DB-122</span>
+    <span class="bug-title">Recently completed snapshots produced platform metrics</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Assertion failed</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P1</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>A data-integrity check against <code>llmv_db</code> returned 100 offending row(s). 100+ recently completed snapshots produced no platform metrics — analysis ran but stored nothing</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-122</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+Error: 100+ recently completed snapshots produced no platform metrics — analysis ran but stored nothing
+Expected: 0
+Received: 100
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Compute and credits are consumed without producing value for the customer.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-122</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+<p>---</p>
+<p># 🟡</p>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-122"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P2" data-suite="db" data-bucket="test">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P2">P2</span>
+    <span class="bug-id">DB-026</span>
+    <span class="bug-title">No citation rows orphaned from a query response</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Query too slow — needs narrowing, result unknown</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>02-data-integrity.spec.ts</code></span>
+      <span><b>Priority</b> P2</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>The verification query for this case did not complete within the timeout. This is usually a query-performance problem on a large table rather than a data defect — the check needs narrowing before the result can be trusted.</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>02-data-integrity.spec.ts</code> for case DB-026</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+error: canceling statement due to statement timeout
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>Compute and credits are consumed without producing value for the customer.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-026</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-026"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P2" data-suite="db" data-bucket="test">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P2">P2</span>
+    <span class="bug-id">DB-044</span>
+    <span class="bug-title">Share of voice stays within 0-100</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Query too slow — needs narrowing, result unknown</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>02-data-integrity.spec.ts</code></span>
+      <span><b>Priority</b> P2</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>The verification query for this case did not complete within the timeout. This is usually a query-performance problem on a large table rather than a data defect — the check needs narrowing before the result can be trusted.</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>02-data-integrity.spec.ts</code> for case DB-044</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+error: canceling statement due to statement timeout
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>No customer impact. The test itself is incorrect and needs fixing so the suite stays trustworthy.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-044</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-044"</code></pre>
+  </div>
+</article>
+<article class="bug" data-sev="P2" data-suite="db" data-bucket="test">
+  <button class="bug-head" aria-expanded="false">
+    <span class="chev" aria-hidden="true">▸</span>
+    <span class="sev sev-P2">P2</span>
+    <span class="bug-id">DB-117</span>
+    <span class="bug-title">Citation rank is positive when set</span>
+    <span class="suite-tag">Database</span>
+  </button>
+  <div class="bug-body" hidden>
+    <div class="meta">
+      <span><b>Classification</b> Query too slow — needs narrowing, result unknown</span>
+      <span><b>Layer</b> Database</span>
+      <span><b>Spec</b> <code>04-security-edge-cases.spec.ts</code></span>
+      <span><b>Priority</b> P2</span>
+    </div>
+
+    <h4>Description</h4>
+    <p>The verification query for this case did not complete within the timeout. This is usually a query-performance problem on a large table rather than a data defect — the check needs narrowing before the result can be trusted.</p>
+
+    <h4>Steps to Reproduce</h4>
+    <ol>
+<li>Connect to Twingate (postgres-llmv must resolve)</li>
+<li>Connect to the llmv_db database with the read-only account</li>
+<li>Run the query defined in <code>04-security-edge-cases.spec.ts</code> for case DB-117</li>
+<li>Compare the returned row count against the expected value below</li>
+</ol>
+
+    <div class="two-col">
+      <div><h4>Expected Result</h4><p>The query returns zero offending rows.</p></div>
+      <div><h4>Actual Result</h4><pre class="code"><code>
+error: canceling statement due to statement timeout
+</code></pre></div>
+    </div>
+
+    <h4>Impact</h4>
+    <p>No customer impact. The test itself is incorrect and needs fixing so the suite stays trustworthy.</p>
+
+    <h4>Acceptance Criteria</h4>
+    <ul>
+<li>The query returns zero offending rows.</li>
+<li><code>DB-117</code> passes on a clean run with no retries</li>
+<li>No regression in other tests on the Database tab</li>
+</ul>
+<p>---</p>
+<p>#</p>
+
+    <h4>Rerun this case</h4>
+    <pre class="code"><code>npx playwright test --workers=1 -g "DB-117"</code></pre>
+  </div>
+</article>
+</div>
+
+
+<h2>Logged Defects</h2>
+<p class="muted">These tests pass. Each tolerates current behaviour but records a real contract deviation.</p>
+<table>
+  <thead><tr><th>ID</th><th>Description</th><th>Suite</th></tr></thead>
+  <tbody>
+  <tr>
+    <td><code>LLMV-API-130</code></td>
+    <td>POST /queries/ response contains no IDs</td>
+    <td class="muted">API</td>
+  </tr><tr>
+    <td><code>LLMV-API-130</code></td>
+    <td>POST /queries/ returns message only — no IDs in response</td>
+    <td class="muted">API</td>
+  </tr><tr>
+    <td><code>LLMV-API-132</code></td>
+    <td>Raw array rejected — only {items:[...]} wrapper accepted</td>
+    <td class="muted">API</td>
+  </tr><tr>
+    <td><code>LLMV-API-136</code></td>
+    <td>Naive {competitors:[...]} rejected — use operation fields</td>
+    <td class="muted">API</td>
+  </tr>
+  </tbody>
+</table>
+
+
+
+<footer>
+  Generated from <code>qa-report-&lt;suite&gt;.md</code>.
+  All database queries in this report are read-only and safe to run against production.
+</footer>
+
+</div>
+
+<script>
+  document.querySelectorAll('.bug-head').forEach(function (head) {
+    head.addEventListener('click', function () {
+      var open = head.getAttribute('aria-expanded') === 'true';
+      head.setAttribute('aria-expanded', String(!open));
+      head.nextElementSibling.hidden = open;
+    });
+  });
+
+  document.getElementById('filters').addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#filters button').forEach(function (b) { b.classList.remove('on'); });
+    btn.classList.add('on');
+
+    var f = btn.dataset.f;
+    document.querySelectorAll('.bug').forEach(function (card) {
+      var show =
+        f === 'all' ? true :
+        f.indexOf('suite:') === 0 ? card.dataset.suite === f.slice(6) :
+        card.dataset.sev === f;
+      card.style.display = show ? '' : 'none';
+    });
+  });
+</script>
+</body>
+</html>
